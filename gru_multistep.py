@@ -7,25 +7,6 @@
 @ Author  : Jimeng Shi
 @ Time    : 12/15/21 13:46
 """
-#!/usr/bin/env python3
-# -*- coding: UTF-8 -*-
-"""
-@ Project : TSF
-@ FileName: rnn_multistep.py
-@ IDE     : PyCharm
-@ Author  : Jimeng Shi
-@ Time    : 12/14/21 15:46
-"""
-#!/usr/bin/env python3
-# -*- coding: UTF-8 -*-
-"""
-@ Project : TSF
-@ FileName: lstm_multistep.py
-@ IDE     : PyCharm
-@ Author  : Jimeng Shi
-@ Time    : 12/14/21 10:51
-"""
-
 from matplotlib import pyplot
 from tensorflow import keras
 from math import sqrt
@@ -37,7 +18,11 @@ from helper import series_to_supervised
 from keras.layers.recurrent import GRU
 import matplotlib.pyplot as plt
 from pandas import read_csv
-
+from tensorflow.keras.optimizers import Adam
+from pandas import read_csv
+from sklearn.metrics import mean_absolute_error
+from helper import series_to_supervised, mean_absolute_percentage_error
+import numpy as np
 
 
 # load dataset
@@ -56,7 +41,7 @@ values = values.astype('float32')
 # scaled = scaler.fit_transform(values)
 
 # specify the number of lag hours
-n_hours = 3*24
+n_hours = 4*24
 n_features = 8
 
 # frame as supervised learning
@@ -65,7 +50,7 @@ reframed = series_to_supervised(values, n_hours, 3)
 
 # split into train and test sets
 reframed_values = reframed.values
-n_train_hours = int(len(reframed_values)*0.7)
+n_train_hours = int(len(reframed_values)*0.6998)
 train = reframed_values[:n_train_hours, :]
 test = reframed_values[n_train_hours:, :]
 
@@ -91,32 +76,34 @@ print("train_X.shape, train_y.shape, test_X.shape, test_y.shape:\n", train_X.sha
 
 
 # design network
+lr = 0.00001
+EPOCHS = 200
 model = keras.Sequential()
-model.add(GRU(50, input_shape=(train_X.shape[1], train_X.shape[2])))
+model.add(GRU(75, input_shape=(train_X.shape[1], train_X.shape[2])))
 model.add(Dropout(0.2))
-model.add(Dense(3))
-# # model.add(SimpleRNN(1, return_sequences=True, input_shape=(train_X.shape[1], train_X.shape[2])))
-# # model.add(Dropout(0.2))
-# model.add(layers.Flatten(input_shape=(train_X.shape[1], train_X.shape[2])))
-# model.add(layers.Dense(64, activation='relu'))
-# model.add(layers.Dense(32, activation='relu'))
-# model.add(layers.Dense(3))   # Regression -> No Need for Activation
-model.summary()
-model.compile(loss='mae', optimizer='adam')
+model.add(Dense(train_y.shape[1]))
+# model.summary()
+model.compile(
+              optimizer=Adam(learning_rate=lr, decay=lr/EPOCHS),
+              # optimizer='adam',
+              loss='mse',
+              metrics=['mae'])
 
 # fit network
 history = model.fit(train_X, train_y,
-                    epochs=10,
-                    batch_size=256,
+                    epochs=EPOCHS,
+                    batch_size=512,
                     validation_data=(test_X, test_y),
                     verbose=2,
                     shuffle=False)
+
 # plot history
 pyplot.plot(history.history['loss'], label='train')
 pyplot.plot(history.history['val_loss'], label='test')
 pyplot.legend()
-plt.title("Training loss V.S. Testing loss with LSTM")
-# plt.savefig('./graph/lstm_loss.png', dpi=300)
+plt.title("Training loss V.S. Testing loss")
+# plt.savefig('./graph/rnn_loss.png', dpi=300)
+# pyplot.tight_layout()
 pyplot.show()
 
 # make a prediction
@@ -146,34 +133,88 @@ inv_y = inv_y.reshape((-1, 1))
 
 # calculate RMSE
 rmse = sqrt(mean_squared_error(inv_y, inv_yhat))
+rmse = sqrt(mean_squared_error(inv_y, inv_yhat))
+mae = mean_absolute_error(inv_y, inv_yhat)
+mape = mean_absolute_percentage_error(inv_y, inv_yhat)
 print('Test RMSE: %.3f' % rmse)
+print('Test MAE: %.3f' % mae)
+print('Test MAPE: %.3f' % mape)
+
 
 inv_yhat = inv_yhat.reshape((-1, 3))
 inv_y = inv_y.reshape((-1, 3))
 
-# # plot Prediction V.S. actual value of PM2.5
-# plt.plot(inv_yhat[0:256, 0], label='T1_prediction')
-# plt.plot(inv_yhat[0:256, 1], label='T2_prediction')
-# plt.plot(inv_yhat[0:256, 2], label='T3_prediction')
-# plt.plot(inv_y[0:256, 0], label='ground_truth')
-#
-# plt.title("Predicted V.S. Actual Value")
-# plt.xlabel("Timestamps")
-# plt.ylabel("PM2.5")
-# # plt.savefig('./graph/RNN_prediction.png')
-# plt.legend()
-# plt.show()
+
+dates = ['07-04', '07-07', '07-10', '07-13', '07-16', '07-19']
+
+# plot Prediction V.S. actual value of PM2.5
+# plt.rcParams['font.family'] = 'serif'
+# plt.rcParams['font.serif'] = ['Times New Roman'] + plt.rcParams['font.serif']
+plt.plot(inv_yhat[20:379, 0], label='T1_prediction')
+plt.plot(inv_yhat[20:379, 1], label='T2_prediction')
+plt.plot(inv_yhat[20:379, 2], label='T3_prediction')
+plt.plot(inv_y[20:379, 0], label='ground_truth')
+plt.xlabel("Time", fontsize='14')
+plt.ylabel("PM2.5", fontsize='14')
+plt.xticks(np.arange(0, 361, 72), dates, fontsize=14)
+plt.yticks(fontsize=14)
+plt.title('Predicted (T1, T2, T3) V.S. Actual Value of PM2.5', fontsize=16)
+plt.legend(prop={"size": 12}, loc='upper right')
+plt.show()
+plt.close()
 
 
 # show the difference
-plt.plot(inv_yhat[0:256, 0]-inv_y[0:256, 0], label='T1_difference')
-plt.plot(inv_yhat[0:256, 1]-inv_y[0:256, 0], label='T2_difference')
-plt.plot(inv_yhat[0:256, 2]-inv_y[0:256, 0], label='T3_difference')
+plt.plot(np.subtract(inv_yhat[20:379, 0], inv_y[20:379, 0]), label='T1_difference')     # truth_y[10:369]
+plt.plot(np.subtract(inv_yhat[20:379, 1], inv_y[20:379, 0]), label='T2_difference')
+plt.plot(np.subtract(inv_yhat[20:379, 2], inv_y[20:379, 0]), label='T3_difference')
 # plt.plot(inv_y[0:256, 0], label='ground_truth')
-
-plt.title("Differences between Predicted and Actual Value")
-plt.xlabel("Timestamps")
-plt.ylabel("Difference Value")
+plt.xticks(np.arange(0, 361, 72), dates, fontsize=14)
+plt.yticks(fontsize=14)
+plt.title("Difference between Predicted and Actual Value of PM2.5", fontsize=16)
+plt.xlabel("Time", fontsize='14')
+plt.ylabel("Difference", fontsize='14')
 # plt.savefig('./graph/RNN_prediction.png')
-plt.legend()
+plt.legend(prop={"size": 12}, loc='upper right')
 plt.show()
+plt.close()
+
+
+
+# # (3, 1) subplot
+# # plot Prediction V.S. actual value of PM2.5
+# plt.rcParams['font.family'] = 'serif'
+# plt.rcParams['font.serif'] = ['Times New Roman'] + plt.rcParams['font.serif']
+# fig, (ax1, ax2, ax3) = plt.subplots(3, 1)
+# ax1.plot(inv_yhat[17:376, 0], label='T1_prediction')
+# ax1.plot(inv_y[17:376, 0], label='T1_truth')
+# ax1.set_title("Predicted V.S. Actual Value of T1, T2, T3", fontsize='16')
+# ax1.set_xlabel("Timestamps", fontsize='14')
+# ax1.set_ylabel("PM2.5 (T1)", fontsize='14')
+# ax1.set_xticks([0, 60, 120, 180, 240, 300, 360])
+# ax1.set_yticks([-50, 0, 50, 100, 150, 200, 250])
+# # plt.savefig('./graph/rnn_prediction.png')
+# ax1.legend()
+#
+#
+# ax2.plot(inv_yhat[17:376, 1], label='T2_prediction')
+# ax2.plot(inv_y[17:376, 1], label='T2_truth')
+# # ax2.set_title("T2", fontsize='16')
+# # ax2.set_xlabel("Timestamps", fontsize='14')
+# ax2.set_ylabel("PM2.5 (T2)", fontsize='14')
+# ax2.set_xticks([0, 60, 120, 180, 240, 300, 360])
+# ax2.set_yticks([-50, 0, 50, 100, 150, 200, 250])
+# # plt.savefig('./graph/lstm_prediction.png')
+# ax2.legend()
+#
+#
+# ax3.plot(inv_yhat[17:376, 2], label='T3_prediction')
+# ax3.plot(inv_y[17:376, 2], label='T3_truth')
+# # ax3.set_title("T3", fontsize='16')
+# ax3.set_xlabel("Timestamps", fontsize='14')
+# ax3.set_ylabel("PM2.5 (T3)", fontsize='14')
+# ax3.set_xticks([0, 60, 120, 180, 240, 300, 360])
+# ax3.set_yticks([-50, 0, 50, 100, 150, 200, 250])
+# # plt.savefig('./graph/lstm_prediction.png')
+# ax3.legend()
+# plt.show()

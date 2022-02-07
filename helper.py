@@ -53,5 +53,5 @@ def series_to_supervised(data, n_in=1, n_out=1, dropnan=True):
 def mean_absolute_percentage_error(actual, pred):
     for i in range(len(actual)):
         if actual[i] == 0:
-            actual[i] = actual[i] + 1
+            actual[i] = actual[i] - 0.1
     return np.mean(abs((actual - pred) / actual)) * 100
